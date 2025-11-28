@@ -51,12 +51,6 @@ def handle_escape():
         print("Paused. Press Ctrl+Alt+Shift+A to resume or Shift+ESC to exit.")
         return
 
-    if exit_armed:
-        print("Still paused. Use Ctrl+Alt+Shift+A to resume or Shift+ESC to exit.")
-    else:
-        print("Not running. Use Ctrl+Alt+Shift+A to start or Shift+ESC to exit.")
-
-
 def handle_shift_escape():
     """Exit only after ESC armed the shutdown."""
     global exit_armed, should_exit
