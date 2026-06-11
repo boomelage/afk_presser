@@ -25,8 +25,10 @@ keystroke can't crash the loop. A thin PyQt5 GUI (`afk_presser.py`) sits on top.
 - **Randomised timing.** Separate min/max windows for how long the key is *held*
   and the *interval* before the next press, so the cadence isn't perfectly
   uniform.
-- **Global hotkey toggle.** `Ctrl+Shift+Alt` starts/stops pressing even when
-  the window isn't focused, so you can switch to your target window first.
+- **Configurable global hotkey toggle.** A global hotkey (default
+  `Ctrl+Shift+Alt`) starts/stops pressing even when the window isn't focused, so
+  you can switch to your target window first. Click **Set hotkey…** and press
+  the combination you want — it's remembered between runs.
 - **Accident-resistant inputs.** The key and timing fields are read-only to
   typing (timing still adjusts via the spinner arrows and scroll wheel), so a
   stray keystroke — including the presser's own — can't silently reconfigure it.
@@ -76,9 +78,14 @@ python src/afk_presser.py
    - **Interval min / max** — the gap before the next press.
    - Each press picks a random value within these windows. Use **Default** to
      restore the starting values.
-3. **Switch to your target window** — keys go to whatever is focused.
-4. **Start pressing** with the **Start** button, or press **`Ctrl+Shift+Alt`**
-   from anywhere. Press it again (or click **Stop**) to halt.
+3. **(Optional) Set your toggle hotkey.** Click **Set hotkey…** under *Toggle
+   hotkey*, then press the key combination you want (e.g. `Ctrl+Shift+Alt`,
+   `Ctrl+Alt+P`, or `F8`). Your choice is saved and restored next launch. Click
+   **Cancel** to keep the current one.
+4. **Switch to your target window** — keys go to whatever is focused.
+5. **Start pressing** with the **Start** button, or press your **toggle hotkey**
+   (default `Ctrl+Shift+Alt`) from anywhere. Press it again (or click **Stop**)
+   to halt.
 
 The status line shows the current state: `Idle`, `Pressing '<key>'`, or an error.
 
@@ -163,7 +170,7 @@ afk_presser/
 | --- | --- |
 | Nothing is typed when running | The wrong window is focused — switch to your target first. On macOS, grant Accessibility + Input Monitoring. |
 | `'<x>' is not a single character or a known special key` | Use a single character, or one of the names in the **Special** dropdown (e.g. `space`, `enter`, `up`, `f5`). |
-| Global hotkey doesn't work | Another app may have claimed `Ctrl+Shift+Alt`, or the OS needs input-monitoring permission (see platform notes). |
+| Global hotkey doesn't work | Another app may have claimed the combination (try **Set hotkey…** to pick another), or the OS needs input-monitoring permission (see platform notes). |
 | `ModuleNotFoundError: PyQt5` / `pynput` | Install dependencies: `pip install -r requirements.txt`. |
 
 ---
