@@ -1,0 +1,7 @@
+# Runtime dependencies
+pynput>=1.7
+PyQt5>=5.15
+
+# Build dependencies (only needed to run build.py, not to run the app)
+pyinstaller>=6.0
+dmgbuild>=1.6; sys_platform == "darwin"  # macOS .dmg installer
