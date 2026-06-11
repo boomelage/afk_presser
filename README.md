@@ -1,4 +1,4 @@
-# AFK Key Presser
+# Auto Key Presser
 
 A small cross-platform desktop utility that taps a single key for you on a
 randomised, human-ish schedule. Pick a key, set how long to hold it and how long
@@ -7,7 +7,7 @@ for keeping a session "active" while you're away from the keyboard.
 
 The pressing logic lives in a UI-free engine (`presser_engine.py`) that
 validates input up front, never busy-spins the CPU, and is built so a single bad
-keystroke can't crash the loop. A thin PyQt5 GUI (`afk_presser.py`) sits on top.
+keystroke can't crash the loop. A thin PyQt5 GUI (`auto_presser.py`) sits on top.
 
 > **Heads-up:** keystrokes are sent to whatever window is focused. Many games and
 > online services prohibit automated input — use this where it's allowed (offline
@@ -25,8 +25,10 @@ keystroke can't crash the loop. A thin PyQt5 GUI (`afk_presser.py`) sits on top.
 - **Randomised timing.** Separate min/max windows for how long the key is *held*
   and the *interval* before the next press, so the cadence isn't perfectly
   uniform.
-- **Global hotkey toggle.** `Ctrl+Shift+Alt` starts/stops pressing even when
-  the window isn't focused, so you can switch to your target window first.
+- **Configurable global hotkey toggle.** A global hotkey (default
+  `Ctrl+Shift+Alt`) starts/stops pressing even when the window isn't focused, so
+  you can switch to your target window first. Click **Set hotkey…** and press
+  the combination you want — it's remembered between runs.
 - **Accident-resistant inputs.** The key and timing fields are read-only to
   typing (timing still adjusts via the spinner arrows and scroll wheel), so a
   stray keystroke — including the presser's own — can't silently reconfigure it.
@@ -49,8 +51,8 @@ keystroke can't crash the loop. A thin PyQt5 GUI (`afk_presser.py`) sits on top.
 
 ```bash
 # 1. Clone
-git clone https://github.com/boomelage/afk_presser.git
-cd afk_presser
+git clone https://github.com/boomelage/auto_presser.git
+cd auto_presser
 
 # 2. (Recommended) create a virtual environment
 python -m venv .venv
@@ -61,7 +63,7 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # 4. Run
-python src/afk_presser.py
+python src/auto_presser.py
 ```
 
 ---
@@ -76,9 +78,14 @@ python src/afk_presser.py
    - **Interval min / max** — the gap before the next press.
    - Each press picks a random value within these windows. Use **Default** to
      restore the starting values.
-3. **Switch to your target window** — keys go to whatever is focused.
-4. **Start pressing** with the **Start** button, or press **`Ctrl+Shift+Alt`**
-   from anywhere. Press it again (or click **Stop**) to halt.
+3. **(Optional) Set your toggle hotkey.** Click **Set hotkey…** under *Toggle
+   hotkey*, then press the key combination you want (e.g. `Ctrl+Shift+Alt`,
+   `Ctrl+Alt+P`, or `F8`). Your choice is saved and restored next launch. Click
+   **Cancel** to keep the current one.
+4. **Switch to your target window** — keys go to whatever is focused.
+5. **Start pressing** with the **Start** button, or press your **toggle hotkey**
+   (default `Ctrl+Shift+Alt`) from anywhere. Press it again (or click **Stop**)
+   to halt.
 
 The status line shows the current state: `Idle`, `Pressing '<key>'`, or an error.
 
@@ -129,9 +136,9 @@ dispatch), uploading each binary as a workflow artifact.
 ## Project structure
 
 ```
-afk_presser/
+auto_presser/
 ├── src/
-│   ├── afk_presser.py      # PyQt5 GUI (entry point)
+│   ├── auto_presser.py     # PyQt5 GUI (entry point)
 │   └── presser_engine.py   # UI-free KeyPresser engine + key parsing
 ├── build.py                # PyInstaller build helper (per-OS)
 ├── requirements.txt        # runtime dependencies
@@ -151,7 +158,7 @@ afk_presser/
     always releases a held key. Configure it with `set_key()` / `set_timing()`,
     drive it with `start()` / `stop()` / `toggle()` / `shutdown()`, and observe
     it via the `on_state_change` / `on_error` callbacks.
-- **`afk_presser.py`** — builds the window, wires widgets to the engine, and
+- **`auto_presser.py`** — builds the window, wires widgets to the engine, and
   marshals the engine's background-thread callbacks back onto the GUI thread with
   Qt signals. It also registers the global hotkey via `pynput`.
 
@@ -163,7 +170,7 @@ afk_presser/
 | --- | --- |
 | Nothing is typed when running | The wrong window is focused — switch to your target first. On macOS, grant Accessibility + Input Monitoring. |
 | `'<x>' is not a single character or a known special key` | Use a single character, or one of the names in the **Special** dropdown (e.g. `space`, `enter`, `up`, `f5`). |
-| Global hotkey doesn't work | Another app may have claimed `Ctrl+Shift+Alt`, or the OS needs input-monitoring permission (see platform notes). |
+| Global hotkey doesn't work | Another app may have claimed the combination (try **Set hotkey…** to pick another), or the OS needs input-monitoring permission (see platform notes). |
 | `ModuleNotFoundError: PyQt5` / `pynput` | Install dependencies: `pip install -r requirements.txt`. |
 
 ---

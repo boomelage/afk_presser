@@ -1,6 +1,6 @@
 name: Build binaries
 
-# Produces standalone AfkPresser binaries for Windows and macOS.
+# Produces standalone AutoPresser binaries for Windows and macOS.
 # PyInstaller can't cross-compile, so each binary is built on its own runner.
 
 on:
@@ -17,9 +17,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: afkpresser-windows
+            artifact: autopresser-windows
           - os: macos-latest
-            artifact: afkpresser-macos
+            artifact: autopresser-macos
 
     steps:
       - uses: actions/checkout@v4
