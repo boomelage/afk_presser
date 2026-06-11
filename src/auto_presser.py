@@ -78,71 +78,48 @@ for _n in range(1, 25):
 # Capturing a hotkey means turning the keys the user held down into the string
 # format pynput's HotKey.parse understands (e.g. "<ctrl>+<shift>+a").
 #
-# We read the combo from Qt key events (on the GUI thread) rather than a pynput
-# listener: on macOS, starting a second pynput listener while the Qt event loop
-# is running calls HIToolbox text-input APIs off the main thread and aborts the
-# process with SIGTRAP. Qt's own key events avoid that entirely.
+# We capture from the app's single, long-lived pynput listener (the same one
+# that detects the live hotkey) rather than a second listener or Qt key events.
+# This matters on macOS: (1) starting a *second* pynput listener while Qt's run
+# loop is active aborts the process (Carbon TIS asserts main-thread), and
+# (2) Qt's grabKeyboard only reroutes events inside the app -- it can't stop the
+# pressed keys from also reaching the OS, so capturing Ctrl+Shift would still
+# actuate those modifiers in other apps. Suppressing at the listener's macOS
+# event tap (see MainWindow._darwin_intercept) is the only way to swallow the
+# combo while it is being captured.
 
-# Qt modifier keys -> the token names the hotkey spec uses. main() sets
-# AA_MacDontSwapCtrlAndMeta so Key_Control/Key_Meta map to the *physical* keys
-# (Ctrl/Cmd) on macOS rather than Qt's default swapped pair.
-_QT_HOTKEY_MODS = {
-    Qt.Key_Control: "ctrl",
-    Qt.Key_Shift: "shift",
-    Qt.Key_Alt: "alt",
-    Qt.Key_Meta: "cmd",
+# pynput modifier keys (incl. left/right variants) -> the token names the
+# hotkey spec uses.
+_PYNPUT_HOTKEY_MODS = {
+    keyboard.Key.ctrl: "ctrl",
+    keyboard.Key.ctrl_l: "ctrl",
+    keyboard.Key.ctrl_r: "ctrl",
+    keyboard.Key.shift: "shift",
+    keyboard.Key.shift_l: "shift",
+    keyboard.Key.shift_r: "shift",
+    keyboard.Key.alt: "alt",
+    keyboard.Key.alt_l: "alt",
+    keyboard.Key.alt_r: "alt",
+    keyboard.Key.cmd: "cmd",
+    keyboard.Key.cmd_l: "cmd",
+    keyboard.Key.cmd_r: "cmd",
 }
-# Qt non-character keys -> the pynput Key names used inside "<...>".
-_QT_HOTKEY_KEYS = {
-    Qt.Key_Space: "space",
-    Qt.Key_Return: "enter",
-    Qt.Key_Enter: "enter",
-    Qt.Key_Tab: "tab",
-    Qt.Key_Escape: "esc",
-    Qt.Key_Backspace: "backspace",
-    Qt.Key_Delete: "delete",
-    Qt.Key_Insert: "insert",
-    Qt.Key_Home: "home",
-    Qt.Key_End: "end",
-    Qt.Key_PageUp: "page_up",
-    Qt.Key_PageDown: "page_down",
-    Qt.Key_Up: "up",
-    Qt.Key_Down: "down",
-    Qt.Key_Left: "left",
-    Qt.Key_Right: "right",
+_alt_gr = getattr(keyboard.Key, "alt_gr", None)
+if _alt_gr is not None:
+    _PYNPUT_HOTKEY_MODS[_alt_gr] = "alt"
+
+# Named (non-character) pynput keys allowed in a hotkey. A key's ``.name`` is
+# exactly the token used inside "<...>" (e.g. Key.page_up -> "<page_up>").
+_HOTKEY_KEY_NAMES = {
+    "space", "enter", "tab", "esc", "backspace", "delete", "insert",
+    "home", "end", "page_up", "page_down", "up", "down", "left", "right",
 }
-for _n in range(1, 25):
-    _qk = getattr(Qt, f"Key_F{_n}", None)
-    if _qk is not None:
-        _QT_HOTKEY_KEYS[_qk] = f"f{_n}"
+_HOTKEY_KEY_NAMES |= {f"f{_n}" for _n in range(1, 25)}
 
 # Stable display order + labels for modifiers, so "Shift+Ctrl" always renders
 # the same way regardless of which key was pressed first.
 _MODIFIER_ORDER = ["ctrl", "shift", "alt", "cmd"]
 _MODIFIER_LABELS = {"ctrl": "Ctrl", "shift": "Shift", "alt": "Alt", "cmd": "Cmd"}
-
-
-def _qt_hotkey_token(event) -> Optional[tuple]:
-    """Reduce a Qt key event to a hashable ``(kind, value)`` token, or None.
-
-    ``("mod", "ctrl")`` for modifiers, ``("char", "a")`` for printable keys,
-    ``("key", "f5")`` for other named keys. Returns None for keys we can't use.
-    """
-    key = event.key()
-    if key in _QT_HOTKEY_MODS:
-        return ("mod", _QT_HOTKEY_MODS[key])
-    if key in _QT_HOTKEY_KEYS:
-        return ("key", _QT_HOTKEY_KEYS[key])
-    # Letters/digits: read from the key code so it's stable even when a modifier
-    # blanks out event.text() (e.g. Ctrl+A often yields no text).
-    if Qt.Key_A <= key <= Qt.Key_Z:
-        return ("char", chr(key).lower())
-    if Qt.Key_0 <= key <= Qt.Key_9:
-        return ("char", chr(key))
-    text = event.text()
-    if len(text) == 1 and text.isprintable():
-        return ("char", text.lower())
-    return None
 
 
 def tokens_to_hotkey(tokens) -> tuple[str, str]:
@@ -200,6 +177,9 @@ class MainWindow(QMainWindow):
     stateChanged = pyqtSignal(str)
     errorOccurred = pyqtSignal(str)
     hotkeyToggled = pyqtSignal()
+    # Carries a finished capture (a set of tokens) from the listener thread
+    # back onto the GUI thread to bind + persist the new hotkey.
+    hotkeyCaptured = pyqtSignal(object)
 
     def __init__(self) -> None:
         super().__init__()
@@ -233,6 +213,7 @@ class MainWindow(QMainWindow):
         self.stateChanged.connect(self._on_state_change)
         self.errorOccurred.connect(self._on_error)
         self.hotkeyToggled.connect(self._on_toggle_clicked)
+        self.hotkeyCaptured.connect(self._on_hotkey_captured)
 
         if not self._set_hotkey_spec(self._hotkey_spec):
             # A saved combo that no longer parses shouldn't lock the user out.
@@ -240,10 +221,14 @@ class MainWindow(QMainWindow):
             self._set_hotkey_spec(self._hotkey_spec)
         self._refresh_hotkey_ui()
 
-        # One long-lived listener; its callbacks feed the swappable HotKey.
+        # One long-lived listener; its callbacks feed the swappable HotKey, or
+        # the capture logic while a new hotkey is being recorded. darwin_intercept
+        # lets us swallow keys at the macOS event tap during capture (ignored on
+        # other platforms).
         self._listener = keyboard.Listener(
             on_press=self._on_global_press,
             on_release=self._on_global_release,
+            darwin_intercept=self._darwin_intercept,
         )
         self._listener.start()
 
@@ -382,10 +367,8 @@ class MainWindow(QMainWindow):
         self.setFocus()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 (Qt override)
-        if self._capturing_hotkey:
-            self._capture_key_event(event, pressed=True)
-            event.accept()
-            return
+        # Only the "Capture…" press-key picker uses Qt events; hotkey capture
+        # runs off the pynput listener (see _feed_hotkey_capture).
         if not self._capturing:
             super().keyPressEvent(event)
             return
@@ -399,13 +382,6 @@ class MainWindow(QMainWindow):
         self._capturing = False
         self.capture_btn.setText("Capture…")
         event.accept()
-
-    def keyReleaseEvent(self, event) -> None:  # noqa: N802 (Qt override)
-        if self._capturing_hotkey:
-            self._capture_key_event(event, pressed=False)
-            event.accept()
-            return
-        super().keyReleaseEvent(event)
 
     def _on_special_picked(self, index: int) -> None:
         value = self.special_combo.itemData(index)
@@ -436,17 +412,58 @@ class MainWindow(QMainWindow):
             self._hotkey = hotkey
         return True
 
+    # NOTE: the three handlers below run on the pynput listener thread, not the
+    # GUI thread. They must not touch Qt widgets directly — capture results are
+    # marshalled back via the hotkeyCaptured signal.
+    def _darwin_intercept(self, event_type, event):
+        """macOS event-tap hook: swallow keys while capturing a new hotkey.
+
+        Returning ``None`` drops the event at the OS tap (so Ctrl+Shift etc.
+        don't actuate anywhere); the listener still gets on_press/on_release
+        first, which is what drives capture. Ignored on non-macOS platforms.
+        """
+        if self._capturing_hotkey:
+            return None
+        return event
+
     def _on_global_press(self, key) -> None:
+        if self._capturing_hotkey:
+            self._feed_hotkey_capture(key, pressed=True)
+            return
         with self._hotkey_lock:
             hotkey = self._hotkey
         if hotkey is not None:
             hotkey.press(self._listener.canonical(key))
 
     def _on_global_release(self, key) -> None:
+        if self._capturing_hotkey:
+            self._feed_hotkey_capture(key, pressed=False)
+            return
         with self._hotkey_lock:
             hotkey = self._hotkey
         if hotkey is not None:
             hotkey.release(self._listener.canonical(key))
+
+    def _pynput_hotkey_token(self, key):
+        """Reduce a pynput key to a hashable ``(kind, value)`` token, or None.
+
+        ``("mod", "ctrl")`` for modifiers, ``("char", "a")`` for printable keys
+        (canonicalised so Shift+A -> "a"), ``("key", "f5")`` for other named
+        keys. Returns None for keys we can't use in a hotkey.
+        """
+        mod = _PYNPUT_HOTKEY_MODS.get(key)
+        if mod is not None:
+            return ("mod", mod)
+        canon = self._listener.canonical(key)
+        mod = _PYNPUT_HOTKEY_MODS.get(canon)
+        if mod is not None:
+            return ("mod", mod)
+        if isinstance(canon, keyboard.Key):
+            return ("key", canon.name) if canon.name in _HOTKEY_KEY_NAMES else None
+        char = getattr(canon, "char", None)
+        if char and len(char) == 1 and char.isprintable():
+            return ("char", char.lower())
+        return None
 
     def _toggle_hotkey_capture(self) -> None:
         if self._capturing_hotkey:
@@ -455,25 +472,26 @@ class MainWindow(QMainWindow):
             self._start_hotkey_capture()
 
     def _start_hotkey_capture(self) -> None:
-        self._capturing_hotkey = True
         self._cap_pressed = set()
         self._cap_combo = set()
-        self.hotkey_btn.setText("Cancel")
-        self.hotkey_edit.setText("Press keys…")
         # Suppress the live hotkey so the old combo can't fire mid-capture. The
         # listener keeps running (it must never be restarted); a None hotkey
-        # just makes its callbacks no-ops.
+        # just makes its toggle callback a no-op.
         with self._hotkey_lock:
             self._hotkey = None
-        # Route every key event (including modifiers and Space/Enter, which a
-        # focused button would otherwise swallow) to this window's handlers.
-        self.grabKeyboard()
+        self.hotkey_btn.setText("Cancel")
+        self.hotkey_edit.setText("Press keys…")
+        # Set last: from here the listener thread routes keys into capture and
+        # _darwin_intercept swallows them at the OS level (macOS).
+        self._capturing_hotkey = True
 
-    def _capture_key_event(self, event, *, pressed: bool) -> None:
-        """Feed one Qt key event into the in-progress capture."""
-        if event.isAutoRepeat():
-            return
-        token = _qt_hotkey_token(event)
+    def _feed_hotkey_capture(self, key, *, pressed: bool) -> None:
+        """Feed one pynput key event into the in-progress capture.
+
+        Runs on the listener thread. When the combo is complete (all keys
+        lifted) it disables capture and hands the result to the GUI thread.
+        """
+        token = self._pynput_hotkey_token(key)
         if pressed:
             if token is not None:
                 self._cap_pressed.add(token)
@@ -486,9 +504,13 @@ class MainWindow(QMainWindow):
             self._cap_pressed.discard(token)
         # Combo is final once everything is lifted.
         if not self._cap_pressed and self._cap_combo:
-            self._finalize_hotkey_capture(set(self._cap_combo))
+            combo = set(self._cap_combo)
+            # Stop suppressing immediately; the rest runs on the GUI thread.
+            self._capturing_hotkey = False
+            self.hotkeyCaptured.emit(combo)
 
-    def _finalize_hotkey_capture(self, combo) -> None:
+    def _on_hotkey_captured(self, combo) -> None:
+        """Bind + persist a finished capture. Runs on the GUI thread."""
         self._end_hotkey_capture()
         spec, label = tokens_to_hotkey(combo)
         if not self._set_hotkey_spec(spec):
@@ -507,10 +529,8 @@ class MainWindow(QMainWindow):
         self._refresh_hotkey_ui()
 
     def _end_hotkey_capture(self) -> None:
-        """Leave capture mode: drop the keyboard grab and reset the button."""
-        if self._capturing_hotkey:
-            self._capturing_hotkey = False
-            self.releaseKeyboard()
+        """Leave capture mode: stop key suppression and reset the button."""
+        self._capturing_hotkey = False
         self.hotkey_btn.setText("Set hotkey…")
 
     # -- engine wiring -----------------------------------------------------
@@ -573,9 +593,6 @@ class MainWindow(QMainWindow):
 
 
 def main() -> int:
-    # Report the physical Ctrl/Cmd keys on macOS instead of Qt's swapped pair,
-    # so a captured hotkey matches what the pynput listener reports.
-    QApplication.setAttribute(Qt.AA_MacDontSwapCtrlAndMeta, True)
     app = QApplication(sys.argv)
     app.setStyleSheet(STYLESHEET)
     window = MainWindow()
