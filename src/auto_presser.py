@@ -1,4 +1,4 @@
-"""AFK Key Presser — a small PyQt5 desktop app.
+"""Auto Key Presser — a small PyQt5 desktop app.
 
 Pick a key, set how fast/often to tap it, then Start. Pressing is driven by
 ``presser_engine.KeyPresser`` (validated input, no CPU spin, crash-safe). A
@@ -6,7 +6,7 @@ configurable global hotkey (default Ctrl+Shift+Alt) toggles pressing so you can
 start it after switching to the target window; click "Set hotkey…" to capture a
 new combination, which is remembered between runs.
 
-Run with:  python afk_presser.py
+Run with:  python auto_presser.py
 """
 
 from __future__ import annotations
@@ -203,7 +203,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("AFK Key Presser")
+        self.setWindowTitle("Auto Key Presser")
         self.setMinimumWidth(420)
 
         self._capturing = False
@@ -218,7 +218,7 @@ class MainWindow(QMainWindow):
         # macOS a keyboard listener *started* while Qt's run loop is active
         # aborts the process (Carbon TIS asserts main-thread), so the listener
         # must be created here, before app.exec_(), and never restarted.
-        self._settings = QSettings("afk_presser", "afk_presser")
+        self._settings = QSettings("auto_presser", "auto_presser")
         self._hotkey_spec = self._settings.value("hotkey_spec", DEFAULT_HOTKEY_SPEC, type=str)
         self._hotkey_label = self._settings.value("hotkey_label", DEFAULT_HOTKEY_LABEL, type=str)
         self._hotkey_lock = threading.Lock()
@@ -256,7 +256,7 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(18, 16, 18, 16)
         root.setSpacing(12)
 
-        title = QLabel("AFK Key Presser")
+        title = QLabel("Auto Key Presser")
         title.setObjectName("title")
         root.addWidget(title)
 

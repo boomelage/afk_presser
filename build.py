@@ -1,4 +1,4 @@
-"""Build a standalone AFK Presser binary for the current OS.
+"""Build a standalone Auto Presser binary for the current OS.
 
 PyInstaller cannot cross-compile: this produces a binary for whatever OS it is
 run on, dropped into ``build/<os>/``. To get both (Windows, macOS) run this on
@@ -20,9 +20,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-APP_NAME = "AfkPresser"
+APP_NAME = "AutoPresser"
 SRC_DIR = "src"
-ENTRY = "afk_presser.py"  # lives under SRC_DIR
+ENTRY = "auto_presser.py"  # lives under SRC_DIR
 
 # platform.system() -> folder name used under build/
 OS_FOLDERS = {"Windows": "windows", "Darwin": "macos"}
@@ -67,7 +67,7 @@ def build_dmg(app_path: Path, dmg_path: Path, volume_name: str) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build AFK Presser for the current OS.")
+    parser = argparse.ArgumentParser(description="Build Auto Presser for the current OS.")
     parser.add_argument("--name", default=APP_NAME, help="output binary name")
     parser.add_argument("--console", action="store_true", help="keep a console window")
     parser.add_argument("--clean", action="store_true", help="clear PyInstaller caches")

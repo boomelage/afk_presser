@@ -1,4 +1,4 @@
-"""Core engine for the AFK key presser.
+"""Core engine for the Auto key presser.
 
 Kept deliberately free of any UI so it can be driven by a GUI, a CLI, or a
 test. It validates the requested key up front, runs the press loop on a

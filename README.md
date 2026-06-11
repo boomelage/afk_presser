@@ -1,4 +1,4 @@
-# AFK Key Presser
+# Auto Key Presser
 
 A small cross-platform desktop utility that taps a single key for you on a
 randomised, human-ish schedule. Pick a key, set how long to hold it and how long
@@ -7,7 +7,7 @@ for keeping a session "active" while you're away from the keyboard.
 
 The pressing logic lives in a UI-free engine (`presser_engine.py`) that
 validates input up front, never busy-spins the CPU, and is built so a single bad
-keystroke can't crash the loop. A thin PyQt5 GUI (`afk_presser.py`) sits on top.
+keystroke can't crash the loop. A thin PyQt5 GUI (`auto_presser.py`) sits on top.
 
 > **Heads-up:** keystrokes are sent to whatever window is focused. Many games and
 > online services prohibit automated input — use this where it's allowed (offline
@@ -51,8 +51,8 @@ keystroke can't crash the loop. A thin PyQt5 GUI (`afk_presser.py`) sits on top.
 
 ```bash
 # 1. Clone
-git clone https://github.com/boomelage/afk_presser.git
-cd afk_presser
+git clone https://github.com/boomelage/auto_presser.git
+cd auto_presser
 
 # 2. (Recommended) create a virtual environment
 python -m venv .venv
@@ -63,7 +63,7 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # 4. Run
-python src/afk_presser.py
+python src/auto_presser.py
 ```
 
 ---
@@ -136,9 +136,9 @@ dispatch), uploading each binary as a workflow artifact.
 ## Project structure
 
 ```
-afk_presser/
+auto_presser/
 ├── src/
-│   ├── afk_presser.py      # PyQt5 GUI (entry point)
+│   ├── auto_presser.py     # PyQt5 GUI (entry point)
 │   └── presser_engine.py   # UI-free KeyPresser engine + key parsing
 ├── build.py                # PyInstaller build helper (per-OS)
 ├── requirements.txt        # runtime dependencies
@@ -158,7 +158,7 @@ afk_presser/
     always releases a held key. Configure it with `set_key()` / `set_timing()`,
     drive it with `start()` / `stop()` / `toggle()` / `shutdown()`, and observe
     it via the `on_state_change` / `on_error` callbacks.
-- **`afk_presser.py`** — builds the window, wires widgets to the engine, and
+- **`auto_presser.py`** — builds the window, wires widgets to the engine, and
   marshals the engine's background-thread callbacks back onto the GUI thread with
   Qt signals. It also registers the global hotkey via `pynput`.
 
